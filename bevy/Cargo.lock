@@ -347,6 +347,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-test"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "rand 0.10.1",
+ "rand_chacha 0.10.0",
+]
+
+[[package]]
 name = "bevy_a11y"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4614,15 +4623,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "test1"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "rand 0.10.1",
- "rand_chacha 0.10.0",
 ]
 
 [[package]]
