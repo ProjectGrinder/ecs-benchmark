@@ -1,0 +1,138 @@
+#pragma once
+
+#include <iostream>
+#include "ecs.h"
+#include <random>
+#include <chrono>
+#include <fstream>
+
+namespace Test::Test1 {
+    // global random engine
+    inline std::random_device r;
+    inline std::default_random_engine engine(r());
+    inline std::uniform_real_distribution roll(0.0f, 1.0f);
+
+    inline float random_range_float(float min, float max) {
+        return min + (max - min) * roll(engine);
+    }
+
+    struct Position {
+        float x, y;
+    };
+
+    struct Velocity {
+        float x, y;
+    };
+
+    using System::ECS::Query;
+
+    using precision_type = std::chrono::nanoseconds;
+    inline precision_type delta_time = precision_type::zero();
+
+    template<typename T>
+    void movement_system([[maybe_unused]] T &syscall, Query<Position, Velocity> &q) {
+        const auto dt = delta_time.count() / 1000000.0L;
+        for (auto &[id, comps]: q) {
+            comps.get<Position>().x += comps.get<Velocity>().x * static_cast<float>(dt);
+            comps.get<Position>().y += comps.get<Velocity>().y * static_cast<float>(dt);
+        }
+    }
+
+    constexpr auto max_entities = 1000;
+    constexpr auto repetitions = 1000;
+
+    using RMtype = System::ECS::ResourceManager<max_entities, Position, Velocity>;
+    using SCtype = System::ECS::Syscall<max_entities, Position, Velocity>;
+    using TMtype = System::ECS::TaskManager<RMtype, SCtype, movement_system<SCtype> >;
+
+    inline precision_type measure_and_log_execution_time(TMtype &task_manager) {
+        // start clock
+        const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+
+        // systems
+        task_manager.run_all();
+
+        // end clock
+        const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+        delta_time = std::chrono::duration_cast<precision_type>(end - start);
+
+        return delta_time;
+    }
+
+    inline int test() {
+        TMtype task_manager;
+
+        for (uint32_t i = 0; i < max_entities; ++i) {
+            const System::ECS::pid id = task_manager.create_entity();
+            task_manager.add_component<Position>(id, {
+                                                     random_range_float(0.0f, 1000.0f),
+                                                     random_range_float(0.0f, 1000.0f)
+                                                 });
+            task_manager.add_component<Velocity>(id, {
+                                                     random_range_float(-1.0f, 1.0f), random_range_float(-1.0f, 1.0f)
+                                                 });
+        }
+
+        std::array<precision_type, repetitions> execution_times{};
+
+        // while (true) {
+        for (int i = 0; i < repetitions; ++i) {
+            measure_and_log_execution_time(task_manager);
+        }
+
+        for (int i = 0; i < repetitions; ++i) {
+            execution_times.at(i) = measure_and_log_execution_time(task_manager);
+        }
+
+        // write time elapsed to log file
+        if (std::ofstream log_file("test1_kawa.log", std::ios::app); log_file.is_open()) {
+            log_file << "Max Entities: " << max_entities << std::endl;
+            std::cout << "Max Entities: " << max_entities << std::endl;
+            log_file << "Repetitions: " << repetitions << std::endl;
+            std::cout << "Repetitions: " << repetitions << std::endl;
+
+            auto total_time = std::accumulate(execution_times.begin(), execution_times.end(),
+                                              precision_type::zero());
+
+            std::string precision_name = "us";
+            if constexpr (std::is_same_v<precision_type, std::chrono::nanoseconds>) {
+                precision_name = "ns";
+            }
+
+            for (int i = 0; i < repetitions; i++) {
+                log_file << execution_times.at(i).count() << precision_name << std::endl;
+            }
+
+            // Mean
+            auto mean = total_time.count() / static_cast<long double>(repetitions);
+            log_file << "Average: " << mean << precision_name << std::endl;
+            std::cout << "Average: " << mean << precision_name << std::endl;
+
+            // Standard Deviation
+            long double variance = 0;
+            for (int i = 0; i < repetitions; i++) {
+                variance += (execution_times.at(i).count() - mean) * (execution_times.at(i).count() - mean);
+            }
+            auto std_dev = std::sqrt(variance / static_cast<long double>(repetitions));
+            log_file << "Standard Deviation: " << std_dev << precision_name << std::endl;
+            std::cout << "Standard Deviation: " << std_dev << precision_name << std::endl;
+
+            // Min Time / Max Time
+            auto min_time = std::numeric_limits<long double>::max();
+            auto max_time = std::numeric_limits<long double>::min();
+            for (int i = 0; i < repetitions; i++) {
+                min_time = std::min(min_time, (long double) execution_times.at(i).count());
+                max_time = std::max(max_time, (long double) execution_times.at(i).count());
+            }
+            log_file << "Min Time: " << min_time << precision_name << std::endl;
+            std::cout << "Min Time: " << min_time << precision_name << std::endl;
+            log_file << "Max Time: " << max_time << precision_name << std::endl;
+            std::cout << "Max Time: " << max_time << precision_name << std::endl;
+
+            log_file.close();
+        }
+
+        return 0;
+    }
+}

@@ -1,0 +1,291 @@
+#pragma once
+#include <array>
+#include <bitset>
+#include <execution>
+#include <optional>
+#include <ranges>
+#include "ecs_types.h"
+
+namespace System::ECS
+{
+    template<std::size_t MaxResource, typename... Resources>
+    class ResourceManager
+    {
+    private:
+        pid _id = 0;
+        uint64_t _world_version = 1;
+        std::tuple<ResourcePool<MaxResource, Resources>...> _pools;
+
+        std::array<std::size_t, MaxResource> _component_count{};
+        std::bitset<MaxResource> _dirty{};
+        std::bitset<MaxResource> _occupied{};
+        bool overfilled = false;
+
+        template<std::size_t... Index>
+        auto _create_pools(std::index_sequence<Index...>)
+        {
+            return (std::make_tuple(ResourcePool<MaxResource, Resources>()...));
+        }
+
+        template<typename ResourcePool>
+        static void _remove_if_exists(ResourcePool &pool, pid id)
+        {
+            if (pool.has(id))
+            {
+                pool.remove(id);
+            }
+        }
+
+        template <typename Resource>
+        bool _import_from_pool(ResourcePool<MaxResource, Resource> &source_pool)
+        {
+            if (source_pool.begin() == source_pool.end())
+                return false;
+            auto &target_pool = this->query<Resource>();
+            bool structural_change = false;
+
+            for (auto [id, component]: source_pool)
+            {
+                if (target_pool.has(id))
+                {
+                    target_pool.set(id, std::move(Resource(component)));
+                }
+                else
+                {
+                    target_pool.add(id, std::move(Resource(component)));
+                    ++_component_count[id];
+                    _occupied.set(id);
+                    structural_change = true;
+                }
+            }
+            return (structural_change);
+        }
+
+        template<typename Resource>
+        bool _import_resource(SyscallResource<MaxResource, Resources...> &other)
+        {
+            return (_import_from_pool(other.template query<Resource>()));
+        }
+
+        template<size_t... I>
+        bool _import_impl(SyscallResource<MaxResource, Resources...> &other, std::index_sequence<I...>)
+        {
+            bool changed = false;
+            ((changed |= _import_resource<std::tuple_element_t<I, std::tuple<Resources...>>>(other)), ...);
+            return (changed);
+        }
+
+        using _remove_tuple_t = std::tuple<decltype((void) sizeof(Resources), std::bitset<MaxResource>{})...>;
+
+        template<std::size_t... I>
+        void _remove_components_by_id(pid id, const _remove_tuple_t &component_bits, std::index_sequence<I...>)
+        {
+            ((std::get<I>(component_bits).test(id)
+                      ? remove_resource<std::tuple_element_t<I, std::tuple<Resources...>>>(id)
+                      : (void) 0),
+             ...);
+        }
+
+        // UNUSED: compaction is not used in the current algorithm
+        void _rebind(pid old_id, pid new_id)
+        {
+            std::apply([&](auto &...pool) { (pool.rebind(old_id, new_id), ...); }, _pools);
+            std::swap(_component_count[old_id], _component_count[new_id]);
+        }
+
+
+        // UNUSED: compaction is not used in the current algorithm
+        pid _compact()
+        {
+            pid empty_id = 0;
+            pid full_id = MaxResource - 1;
+
+            while (empty_id < full_id)
+            {
+                // Find the next empty slot from the front
+                while (empty_id < full_id && _component_count[empty_id] != 0)
+                    ++empty_id;
+                // Find the next full slot from the back
+                while (empty_id < full_id && _component_count[full_id] == 0)
+                    --full_id;
+                if (empty_id >= full_id)
+                    break;
+                _rebind(full_id, empty_id);
+                ++empty_id;
+                --full_id;
+            }
+            // Scan for the first empty slot, starting from empty_pid
+            while (empty_id < MaxResource && _component_count[empty_id] != 0)
+                ++empty_id;
+
+            return (empty_id);
+        }
+
+    public:
+        constexpr static size_t max_resource_v = MaxResource;
+        using components_t = std::tuple<Resources...>;
+
+        explicit ResourceManager() : _pools(_create_pools(std::index_sequence_for<Resources...>{}))
+        {}
+
+        template<typename Resource>
+        ResourcePool<MaxResource, Resource> &query()
+        {
+            return (std::get<ResourcePool<MaxResource, Resource>>(_pools));
+        }
+
+        template<typename Resource>
+        const ResourcePool<MaxResource, Resource> &query() const
+        {
+            return (std::get<ResourcePool<MaxResource, Resource>>(_pools));
+        }
+
+        template<typename Resource>
+        std::optional<std::reference_wrapper<ResourcePool<MaxResource, Resource>>> query_if_exists()
+        {
+            constexpr static bool exists = contains_type_v<Resource, Resources...>;
+            if constexpr (!exists)
+                return std::nullopt;
+            else
+                return std::ref(std::get<ResourcePool<MaxResource, Resource>>(_pools));
+        }
+
+        template<typename Resource>
+        void add_resource(pid id, Resource &&component)
+        {
+            auto &pool = query<Resource>();
+            pool.add(id, std::forward<Resource>(component));
+            ++_component_count[id];
+            mark_dirty();
+        }
+
+        template<typename Resource>
+        void remove_resource(pid id)
+        {
+            if (auto &pool = query<Resource>(); pool.has(id))
+            {
+                pool.remove(id);
+                --_component_count[id];
+                if (_component_count[id] == 0)
+                {
+                    _occupied.reset(id);
+                }
+                mark_dirty();
+            }
+        }
+
+
+        void delete_entity(pid id)
+        {
+            std::apply([&](auto &...pool) { (_remove_if_exists(pool, id), ...); }, _pools);
+            _component_count[id] = 0;
+            _occupied.reset(id);
+        }
+
+        pid reserve_process()
+        {
+            // increment _id until finds unoccupied space
+            while (_id < MaxResource)
+            {
+                if (_occupied.test(_id))
+                {
+                    _id++;
+                }
+                else
+                {
+                    _occupied.set(_id);
+                    return (_id++);
+                }
+            }
+            // did not find available slot forward, mark as overfilled and retry from the start
+            overfilled = true;
+            _id = 0;
+
+            while (_id < MaxResource)
+            {
+                if (_occupied.test(_id))
+                {
+                    _id++;
+                }
+                else
+                {
+                    _occupied.set(_id);
+                    return (_id++);
+                }
+            }
+
+            // if no available slot, throw exception
+            throw std::runtime_error("No free pid slot available");
+        }
+
+
+        bool import(SyscallResource<MaxResource, Resources...> &other)
+        {
+            if (_import_impl(other, std::make_index_sequence<sizeof...(Resources)>{}))
+            {
+                mark_dirty();
+                return (true);
+            }
+            return (false);
+        }
+
+        void remove_marked(
+                const _remove_tuple_t &component_bits,
+                const std::bitset<MaxResource> &entity_bits,
+                const std::vector<pid> &dirty_ids)
+        {
+            if (dirty_ids.empty()) [[likely]]
+                return;
+
+            bool is_change = false;
+
+            for (pid id: dirty_ids)
+            {
+                is_change = true;
+                if (entity_bits.test(id))
+                {
+                    delete_entity(id);
+                    continue;
+                }
+
+                _remove_components_by_id(id, component_bits, std::make_index_sequence<sizeof...(Resources)>{});
+            }
+
+            if (is_change)
+                mark_dirty();
+        }
+
+        uint64_t get_version() const
+        {
+            return _world_version;
+        }
+
+        void mark_dirty()
+        {
+            _world_version++;
+        }
+
+        void clear()
+        {
+            std::apply([](auto &...pools) { (pools.clear(), ...); }, _pools);
+            _component_count.fill(0);
+            _occupied.reset();
+            overfilled = false;
+            _world_version++;
+            _id = 0;
+        }
+
+        template<typename T>
+        [[nodiscard]] constexpr static bool has_resource_type()
+        {
+            return (contains_type_v<T, Resources...>);
+        }
+
+        const std::bitset<MaxResource> &get_bitset() const
+        {
+            return _occupied;
+        }
+
+    };
+
+} // namespace System::ECS
