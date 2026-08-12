@@ -1,10 +1,6 @@
 #pragma once
 
-#include <iostream>
-#include "ecs.h"
-#include <random>
-#include <chrono>
-#include <fstream>
+#include "test_config.h"
 
 namespace Test::Test2 {
     // global random engine
@@ -12,7 +8,7 @@ namespace Test::Test2 {
     inline std::default_random_engine engine(r());
     inline std::uniform_real_distribution roll(0.0f, 1.0f);
 
-    inline float random_range_float(float min, float max) {
+    inline float random_range_float(const float min, const float max) {
         return min + (max - min) * roll(engine);
     }
 
@@ -37,10 +33,6 @@ namespace Test::Test2 {
             comps.get<Position>().y = -1 * x;
         }
     }
-
-    constexpr auto max_entities = 32000;
-    constexpr auto repetitions = 1000;
-    constexpr auto strange_ratio = 0.20;
 
     using RMtype = System::ECS::ResourceManager<max_entities, Position, Strangeness>;
     using SCtype = System::ECS::Syscall<max_entities, Position, Strangeness>;
@@ -89,8 +81,8 @@ namespace Test::Test2 {
 
         std::array<precision_type, repetitions> execution_times{};
 
-        while (true) {
-        //for (int i = 0; i < repetitions; ++i) {
+        // while (true) {
+        for (int i = 0; i < repetitions; ++i) {
             measure_and_log_execution_time(task_manager);
         }
 
@@ -119,30 +111,25 @@ namespace Test::Test2 {
             }
 
             // Mean
-            auto mean = total_time.count() / static_cast<long double>(repetitions);
+            auto mean = static_cast<long double>(total_time.count()) / static_cast<long double>(repetitions);
             log_file << "Average: " << mean << precision_name << std::endl;
             std::cout << "Average: " << mean << precision_name << std::endl;
 
             // Standard Deviation
             long double variance = 0;
             for (int i = 0; i < repetitions; i++) {
-                variance += (execution_times.at(i).count() - mean) * (execution_times.at(i).count() - mean);
+                variance += (static_cast<long double>(execution_times.at(i).count()) - mean) * (static_cast<long double>(execution_times.at(i).count()) - mean);
             }
             auto std_dev = std::sqrt(variance / static_cast<long double>(repetitions));
             log_file << "Standard Deviation: " << std_dev << precision_name << std::endl;
             std::cout << "Standard Deviation: " << std_dev << precision_name << std::endl;
 
             // Min Time / Max Time
-            auto min_time = std::numeric_limits<long double>::max();
-            auto max_time = std::numeric_limits<long double>::min();
-            for (int i = 0; i < repetitions; i++) {
-                min_time = std::min(min_time, (long double) execution_times.at(i).count());
-                max_time = std::max(max_time, (long double) execution_times.at(i).count());
-            }
-            log_file << "Min Time: " << min_time << precision_name << std::endl;
-            std::cout << "Min Time: " << min_time << precision_name << std::endl;
-            log_file << "Max Time: " << max_time << precision_name << std::endl;
-            std::cout << "Max Time: " << max_time << precision_name << std::endl;
+            std::ranges::sort(execution_times);
+            log_file << "Min Time: " << execution_times.front() << precision_name << std::endl;
+            std::cout << "Min Time: " << execution_times.front() << precision_name << std::endl;
+            log_file << "Max Time: " << execution_times.back() << precision_name << std::endl;
+            std::cout << "Max Time: " << execution_times.back() << precision_name << std::endl;
 
             log_file.close();
         }

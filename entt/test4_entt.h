@@ -1,20 +1,14 @@
 #pragma once
 
-#include "entt/entt.hpp"
-#include <chrono>
-#include <fstream>
-#include <iostream>
-#include <random>
+#include "test_config.h"
 
 namespace Test::Test4 {
-    constexpr auto max_entities = 8000;
-    constexpr auto repetitions = 1000;
     // global random engine
     inline std::random_device r;
     inline std::default_random_engine engine(r());
     inline std::uniform_real_distribution roll(0.0f, 1.0f);
 
-    inline float random_range_float(float min, float max) {
+    inline float random_range_float(const float min, const float max) {
         return min + (max - min) * roll(engine);
     }
 
@@ -58,7 +52,7 @@ namespace Test::Test4 {
 
     inline void counting_system_separated_add(entt::registry &registry) {
         auto view = registry.view<Step>();
-        view.each([&registry](auto entity, Step &step) {
+        view.each([](Step &step) {
             step.sum = (step.sum + step.step) % 256;
         });
     }
@@ -192,30 +186,24 @@ namespace Test::Test4 {
             }
 
             // Mean
-            auto mean = total_time.count() / static_cast<long double>(repetitions);
+            auto mean = static_cast<long double>(total_time.count()) / static_cast<long double>(repetitions);
             log_file << "Average: " << mean << precision_name << std::endl;
             std::cout << "Average: " << mean << precision_name << std::endl;
 
             // Standard Deviation
             long double variance = 0;
             for (int i = 0; i < repetitions; i++) {
-                variance += (execution_times.at(i).count() - mean) * (execution_times.at(i).count() - mean);
+                variance += (static_cast<long double>(execution_times.at(i).count()) - mean) * (static_cast<long double>(execution_times.at(i).count()) - mean);
             }
             auto std_dev = std::sqrt(variance / static_cast<long double>(repetitions));
             log_file << "Standard Deviation: " << std_dev << precision_name << std::endl;
             std::cout << "Standard Deviation: " << std_dev << precision_name << std::endl;
 
-            // Min Time / Max Time
-            auto min_time = std::numeric_limits<long double>::max();
-            auto max_time = std::numeric_limits<long double>::min();
-            for (int i = 0; i < repetitions; i++) {
-                min_time = std::min(min_time, (long double) execution_times.at(i).count());
-                max_time = std::max(max_time, (long double) execution_times.at(i).count());
-            }
-            log_file << "Min Time: " << min_time << precision_name << std::endl;
-            std::cout << "Min Time: " << min_time << precision_name << std::endl;
-            log_file << "Max Time: " << max_time << precision_name << std::endl;
-            std::cout << "Max Time: " << max_time << precision_name << std::endl;
+            std::ranges::sort(execution_times);
+            log_file << "Min Time: " << execution_times.front() << precision_name << std::endl;
+            std::cout << "Min Time: " << execution_times.front() << precision_name << std::endl;
+            log_file << "Max Time: " << execution_times.back() << precision_name << std::endl;
+            std::cout << "Max Time: " << execution_times.back() << precision_name << std::endl;
 
             log_file.close();
         }
