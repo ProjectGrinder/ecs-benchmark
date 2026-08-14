@@ -19,24 +19,6 @@ struct FrameBenchmark {
     file: Option<Mutex<std::fs::File>>,
 }
 
-impl Default for FrameBenchmark {
-    fn default() -> Self {
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("frame_benchmark.log")
-            .ok()
-            .map(|f| Mutex::new(f));
-
-        Self {
-            start: None,
-            durations: Vec::new(),
-            count: 0,
-            file,
-        }
-    }
-}
-
 fn benchmark_start(mut bench: ResMut<FrameBenchmark>) {
     bench.start = Some(Instant::now());
 }
@@ -71,9 +53,6 @@ fn benchmark_end(
             }
             
             let avg_micros = total_micros / (config.repetitions as f64);
-            let min_micros = bench.durations.iter().min().unwrap().as_nanos();
-            let max_micros = bench.durations.iter().max().unwrap().as_nanos();
-
             let mut variance: f64 = 0.0;
             for item in bench.durations.iter() {
                 variance += ((item.as_nanos() as f64) - avg_micros) * ((item.as_nanos() as f64) - avg_micros);
@@ -81,9 +60,22 @@ fn benchmark_end(
             variance /= config.repetitions as f64;
             let stddev = f64::sqrt(variance);
 
+            // sort bench durations to find min/max/median
+            bench.durations.sort_unstable();
+
+            let min_micros = bench.durations.iter().min().unwrap().as_nanos();
+            let max_micros = bench.durations.iter().max().unwrap().as_nanos();
+            let mut median_micros: u128 = 0;
+            if config.repetitions % 2 == 0 {
+                median_micros = (bench.durations.iter().nth(config.repetitions / 2).unwrap().as_nanos() + bench.durations.iter().nth(config.repetitions / 2 - 1).unwrap().as_nanos()) / 2;
+            }
+            else {
+                median_micros = bench.durations.iter().nth(config.repetitions / 2).unwrap().as_nanos();
+            }
+
             let summary = format!(
-                "Benchmark over {} entities: avg {:.3}ns, stddev {:.3}ns, min {}ns, max {}ns",
-                config.max_entities, avg_micros, stddev, min_micros, max_micros
+                "Benchmark over {} entities: avg {:.3}ns, median {:.3}ns, stddev {:.3}ns, min {}ns, max {}ns",
+                config.max_entities, avg_micros, median_micros, stddev, min_micros, max_micros
             );
 
             println!("{}", summary);
@@ -107,17 +99,27 @@ fn main() {
     App::new()
         .add_plugins(MinimalPlugins)
         .insert_resource(resources::SimulationConfig {
-            max_entities: 1000,
+            max_entities: 8000,
             repetitions: 1000,
-            strange_ratio: 0.20,
-            entity_rate: 1000,
+            strange_ratio: 0.0,
+            entity_rate: 2048,
         })
-        .init_resource::<FrameBenchmark>()
-        .add_systems(Startup, setup::test1_setup)
+        .insert_resource(FrameBenchmark{
+            start: None,
+            durations: Vec::new(),
+            count: 0,
+            file: OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("frame_benchmark.log")
+                .ok()
+                .map(|f| Mutex::new(f)),
+        })
+        .add_systems(Startup, setup::test4_setup)
         .add_systems(Update,(
             benchmark_start, 
             (
-                systems::movement_system
+                systems::counting_system,
             ), 
             benchmark_end
         ).chain())

@@ -5,5 +5,5 @@
 #include "test4_entt.h"
 
 int main() {
-    Test::Test1::test();
+    Test::test();
 }

@@ -5,5 +5,5 @@
 #include "test4_kawa.h"
 
 int main() {
-    Test::Test1::test();
+    Test::test();
 }
