@@ -5,8 +5,7 @@
 namespace Test::Test1 {
 
     // global random engine
-    inline std::random_device r;
-    inline std::default_random_engine engine(r());
+    inline std::default_random_engine engine(seed);
     inline std::uniform_real_distribution roll(0.0f, 1.0f);
 
     inline float random_range_float(const float min, const float max) {

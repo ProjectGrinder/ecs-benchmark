@@ -1,4 +1,4 @@
-use crate::{components::*, resources::SimulationConfig};
+use crate::{components::*, resources};
 use bevy::prelude::*;
 use rand::RngExt;
 
@@ -41,8 +41,8 @@ pub fn potato_system(mut queries: ParamSet<(Query<(&mut Potato, &Target)>, Query
     }
 }
 
-pub fn spawner_system(config: Res<SimulationConfig>, mut commands: Commands) {
-    let mut rng = rand::rng();
+pub fn spawner_system(config: Res<resources::SimulationConfig>, mut commands: Commands, mut rng_res: ResMut<resources::RandomNumberGenerator>) {
+    let rng = &mut rng_res.rng;
     for _ in 0..config.entity_rate {
         commands.spawn((
             Position(Vec2::new(

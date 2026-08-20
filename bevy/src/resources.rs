@@ -1,4 +1,11 @@
 use bevy::prelude::*;
+use rand::rngs::Xoshiro256PlusPlus;
+
+/// Shared deterministic pseudorandom number generator for systems that need randomness.
+#[derive(Resource)]
+pub struct RandomNumberGenerator {
+    pub rng: Xoshiro256PlusPlus,
+}
 
 #[derive(Resource)]
 pub struct SimulationConfig {

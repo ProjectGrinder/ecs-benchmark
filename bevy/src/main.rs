@@ -10,6 +10,7 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
+use rand::SeedableRng;
 
 #[derive(Resource)]
 struct FrameBenchmark {
@@ -65,7 +66,7 @@ fn benchmark_end(
 
             let min_micros = bench.durations.iter().min().unwrap().as_nanos();
             let max_micros = bench.durations.iter().max().unwrap().as_nanos();
-            let mut median_micros: u128 = 0;
+            let median_micros: u128;
             if config.repetitions % 2 == 0 {
                 median_micros = (bench.durations.iter().nth(config.repetitions / 2).unwrap().as_nanos() + bench.durations.iter().nth(config.repetitions / 2 - 1).unwrap().as_nanos()) / 2;
             }
@@ -98,6 +99,9 @@ fn benchmark_end(
 fn main() {
     App::new()
         .add_plugins(MinimalPlugins)
+        .insert_resource(resources::RandomNumberGenerator {
+            rng: rand::rngs::Xoshiro256PlusPlus::seed_from_u64(0),
+        })
         .insert_resource(resources::SimulationConfig {
             max_entities: 8000,
             repetitions: 1000,

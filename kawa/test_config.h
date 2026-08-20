@@ -8,6 +8,7 @@
 
 namespace Test {
     // configurations
+    constexpr auto seed = 0;
     constexpr auto repetitions = 1000;
     using precision_type = std::chrono::nanoseconds;
 
