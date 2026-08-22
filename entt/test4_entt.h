@@ -145,6 +145,7 @@ namespace Test::Test4 {
     }
 
     inline int test() {
+        const auto initial_memory = process_memory_bytes();
         entt::registry registry;
 
         setup(registry);
@@ -162,9 +163,15 @@ namespace Test::Test4 {
             execution_times.at(i) = update(registry);
         }
 
+        const auto final_memory = process_memory_bytes();
+        const auto memory_used = final_memory >= initial_memory
+                                      ? final_memory - initial_memory
+                                      : 0;
+
+
         // write time elapsed to log file
         std::ofstream log_file("test4_entt.log", std::ios::app);
-                if (log_file.is_open()) {
+        if (log_file.is_open()) {
             log_file << "Max Entities: " << max_entities << std::endl;
             std::cout << "Max Entities: " << max_entities << std::endl;
             log_file << "Repetitions: " << repetitions << std::endl;
@@ -208,6 +215,15 @@ namespace Test::Test4 {
             std::cout << "Min Time: " << min << precision_name << std::endl;
             log_file << "Max Time: " << max << precision_name << std::endl;
             std::cout << "Max Time: " << max << precision_name << std::endl;
+
+
+            log_file << "Memory Used: " << memory_used << " bytes ("
+                     << static_cast<long double>(memory_used) / (1024.0L * 1024.0L)
+                     << " MiB)" << std::endl;
+            std::cout << "Memory Used: " << memory_used << " bytes ("
+                      << static_cast<long double>(memory_used) / (1024.0L * 1024.0L)
+                      << " MiB)" << std::endl;
+
 
             log_file.close();
         }

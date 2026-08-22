@@ -41,21 +41,16 @@ pub fn potato_system(mut queries: ParamSet<(Query<(&mut Potato, &Target)>, Query
     }
 }
 
-pub fn spawner_system(config: Res<resources::SimulationConfig>, mut commands: Commands, mut rng_res: ResMut<resources::RandomNumberGenerator>) {
-    let rng = &mut rng_res.rng;
+pub fn spawner_system(config: Res<resources::SimulationConfig>, mut commands: Commands) {
     for _ in 0..config.entity_rate {
         commands.spawn((
-            Position(Vec2::new(
-                rng.random_range(-100.0..100.0),
-                rng.random_range(-100.0..100.0),
-            )),
             Lifetime { lifetime: 2 },
         ));
     }
 }
 
-pub fn destructor_system(mut query: Query<(Entity, &Position, &mut Lifetime)>, mut commands: Commands) {
-    for (entity, _, mut lifetime) in &mut query {
+pub fn destructor_system(mut query: Query<(Entity, &mut Lifetime)>, mut commands: Commands) {
+    for (entity, mut lifetime) in &mut query {
         lifetime.lifetime = lifetime.lifetime - 1;
         if lifetime.lifetime == 0 {
             commands.entity(entity).despawn();

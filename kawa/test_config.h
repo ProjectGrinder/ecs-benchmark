@@ -6,9 +6,16 @@
 #include <numeric>
 #include <random>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#else
+#include <sys/resource.h>
+#endif
+
 namespace Test {
     // configurations
-    constexpr auto seed = 0;
+    constexpr auto seed = 776769420;
     constexpr auto repetitions = 1000;
     using precision_type = std::chrono::nanoseconds;
 
@@ -20,25 +27,44 @@ namespace Test {
     namespace Test2 {
         inline int test();
         constexpr auto max_entities = 32000;
-        constexpr auto strange_ratio = 0.0;
+        constexpr auto strange_ratio = 0.1;
     }
 
     namespace Test3 {
         inline int test();
-        constexpr auto entity_rate = 2048;
+        constexpr auto entity_rate = 1024;
         constexpr auto max_entities = 3 * entity_rate;
     }
 
     namespace Test4 {
         inline int test();
-        constexpr auto max_entities = 8000;
+        constexpr auto max_entities = 1000;
     }
 
     // modify bench to activate
-    namespace Bench = Test4;
+    namespace Bench = Test1;
 
     inline int test() {
         return Bench::test();
+    }
+
+    inline std::uint64_t process_memory_bytes() {
+#if defined(_WIN32)
+        PROCESS_MEMORY_COUNTERS_EX memory{};
+        memory.cb = sizeof(memory);
+        if (GetProcessMemoryInfo(GetCurrentProcess(),
+                                 reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&memory),
+                                 sizeof(memory))) {
+            return static_cast<std::uint64_t>(memory.WorkingSetSize);
+                                 }
+        return 0;
+#else
+        rusage usage{};
+        if (getrusage(RUSAGE_SELF, &usage) == 0) {
+            return static_cast<std::uint64_t>(usage.ru_maxrss) * 1024ULL;
+        }
+        return 0;
+#endif
     }
 
     inline std::array<precision_type, 3> min_median_max(std::array<precision_type, repetitions> &execution_times) {

@@ -7,9 +7,9 @@ edition = "2024"
 bevy = "0.19.0"
 rand = "0.10.2"
 
-# [profile.release]
-# opt-level = "z"      # optimize for size ("s" is another good choice)
-# lto = "fat"          # or "thin" if compile time matters
-# codegen-units = 1
-# panic = "abort"
-# strip = true
+[profile.release]
+opt-level = "z"      # optimize for size ("s" is another good choice)
+lto = "fat"          # or "thin" if compile time matters
+codegen-units = 1
+panic = "abort"
+strip = true

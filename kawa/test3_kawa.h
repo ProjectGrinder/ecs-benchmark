@@ -67,6 +67,7 @@ namespace Test::Test3 {
     }
 
     inline int test() {
+        const auto initial_memory = process_memory_bytes();
         TMtype task_manager;
 
         setup(task_manager);
@@ -77,10 +78,15 @@ namespace Test::Test3 {
             measure_and_log_execution_time(task_manager);
         }
 
-
         for (int i = 0; i < repetitions; ++i) {
             execution_times.at(i) = measure_and_log_execution_time(task_manager);
         }
+
+        const auto final_memory = process_memory_bytes();
+        const auto memory_used = final_memory >= initial_memory
+                                      ? final_memory - initial_memory
+                                      : 0;
+
 
         // write time elapsed to log file
         std::ofstream log_file("test3_kawa.log", std::ios::app);
@@ -128,6 +134,13 @@ namespace Test::Test3 {
             std::cout << "Min Time: " << min << precision_name << std::endl;
             log_file << "Max Time: " << max << precision_name << std::endl;
             std::cout << "Max Time: " << max << precision_name << std::endl;
+
+            log_file << "Memory Used: " << memory_used << " bytes ("
+                     << static_cast<long double>(memory_used) / (1024.0L * 1024.0L)
+                     << " MiB)" << std::endl;
+            std::cout << "Memory Used: " << memory_used << " bytes ("
+                      << static_cast<long double>(memory_used) / (1024.0L * 1024.0L)
+                      << " MiB)" << std::endl;
 
             log_file.close();
         }
